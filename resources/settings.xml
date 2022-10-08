@@ -1,0 +1,31 @@
+<settings version="1">
+	<section id="plugin.video.kpl.ksportowy">
+
+		<category id="ks_main" label="30100" help="">
+			<group id="11" label="30101">
+				<setting id="email" type="string" label="30102" help="">
+					<level>0</level>
+					<default />
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string">
+						<heading>30103</heading>
+					</control>
+				</setting>
+				<setting id="password" type="string" label="30104" help="">
+					<level>0</level>
+					<default />
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string">
+						<heading>30105</heading>
+						<hidden>true</hidden>
+					</control>
+				</setting>
+			</group>
+		</category>
+
+	</section>
+</settings>
