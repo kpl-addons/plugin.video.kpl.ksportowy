@@ -142,8 +142,9 @@ class Main(Plugin):
                 
     def play_item(self, id):
         data = self.kssite.playlist(id, 'MOVIE')
-        
+    
         lic = data['drm']['WIDEVINE']['src']
+        lic = lic + '|Content-Type=application/octet-stream|R{SSM}|'
         
         if data['sources']['DASH'][0]['src'].startswith('//'):
             src = 'https:' + data['sources']['DASH'][0]['src'] + '/.mpd'
@@ -163,7 +164,7 @@ class Main(Plugin):
             listitem.setProperty('inputstream', 'inputstream.adaptive')
             listitem.setProperty('inputstream.adaptive.manifest_type', protocol)
             listitem.setProperty('inputstream.adaptive.license_type', drm)
-            listitem.setProperty('inputstream.adaptive.license_key', license + '||R{SSM}|')
+            listitem.setProperty('inputstream.adaptive.license_key', license)
 
             xbmcplugin.setResolvedUrl(self.handle, True, listitem=listitem)
 
