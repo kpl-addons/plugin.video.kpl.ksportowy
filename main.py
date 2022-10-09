@@ -6,7 +6,7 @@ from libka.menu import Menu
 
 # xbmc
 import xbmcgui
-
+import xbmcplugin
 
 class KSSite(Site):
     """K-Sportowy API."""
@@ -23,11 +23,11 @@ class KSSite(Site):
             'cookie': 'AWSALBAPP-0=_remove_; AWSALBAPP-1=_remove_; AWSALBAPP-2=_remove_; AWSALBAPP-3=_remove_'
         }
 
-    def _get_ks(self, endpoint, params, headers=None):
-        params = {
+    def _get_ks(self, endpoint, params={}, headers=None):
+        params.update({
             'lang': 'pl',
             'platform': 'ANDROID'
-        }
+        })
         if endpoint:
             res = self.get(endpoint, params=params, headers=headers)
             log(f'[K-Sportowy] Request made to {res.url} with params: {params}')
@@ -36,11 +36,11 @@ class KSSite(Site):
             else:
                 return ()
             
-    def _post_ks(self, endpoint, params, payload):
-        params = {
+    def _post_ks(self, endpoint, params={}, payload=None):
+        params.update({
             'lang': 'pl',
             'platform': 'ANDROID'
-        }
+        })
         if endpoint:
             res = self.post(endpoint, params=params, json=payload)
             log(f'[K-Sportowy] Request made to {res.url} with params: {params}')
@@ -93,16 +93,26 @@ class KSSite(Site):
             self.storage.save()
         else:
             xbmcgui.Dialog().notification('K-Sportowy', 'Niezalogowano. Dostęp może być ograniczony.')
+            
+    def catalog(self):
+        return self.make_request('get', '/api/products/sections/main')
+    
+    def section(self, id):
+        return self.make_request('get', f'/api/products/sections/{id}')
+    
+    def playlist(self, id, type):
+        param = {'videoType': type}
+        return self.make_request('get', f'/api/products/{id}/videos/playlist', params=param)
 
 
 class Main(Plugin):
     """K-Sportowy plugin."""
 
     MENU = Menu(view='addons', items=[
-        Menu(title='Biblioteka', call='nop'),
-        Menu(title='Rozkład jazdy', call='nop'),
-        Menu(title='Moja lista', call='nop'),
-        Menu(title='Ustawienia', call='nop'),
+        Menu(title='Biblioteka', call='catalog'),
+        Menu(title='Rozkład jazdy', call='noop'),
+        Menu(title='Moja lista', call='noop'),
+        Menu(title='Ustawienia', call='noop'),
     ])
 
     def __init__(self):
@@ -115,6 +125,47 @@ class Main(Plugin):
 
     def noop(self):
         pass
+    
+    def catalog(self):
+        data = self.kssite.catalog()
+        
+        with self.directory() as kdir:
+            for item in data:
+                kdir.menu(item['title'], call(self.listing, item['id']))
+                
+    def listing(self, id):
+        data = self.kssite.section(id)['elements']
+        
+        with self.directory() as kdir:
+            for item in data:
+                kdir.play(item['item']['title'], call(self.play_item, item['item']['id']))
+                
+    def play_item(self, id):
+        data = self.kssite.playlist(id, 'MOVIE')
+        
+        lic = data['drm']['WIDEVINE']['src']
+        
+        if data['sources']['DASH'][0]['src'].startswith('//'):
+            src = 'https:' + data['sources']['DASH'][0]['src'] + '/.mpd'
+        else:
+            src = data['sources']['DASH'][0]['src'] + '/.mpd'
+
+        self.player(source=src, drm='com.widevine.alpha', protocol='mpd', license=lic)
+        
+    def player(self, source, drm, protocol, license):
+        from inputstreamhelper import Helper  # pylint: disable=import-outside-toplevel
+
+        is_helper = Helper(protocol, drm=drm)
+        if is_helper.check_inputstream():
+            listitem = xbmcgui.ListItem(path=source)
+            listitem.setContentLookup(False)
+            listitem.setProperty("IsPlayable", "true")
+            listitem.setProperty('inputstream', 'inputstream.adaptive')
+            listitem.setProperty('inputstream.adaptive.manifest_type', protocol)
+            listitem.setProperty('inputstream.adaptive.license_type', drm)
+            listitem.setProperty('inputstream.adaptive.license_key', license + '||R{SSM}|')
+
+            xbmcplugin.setResolvedUrl(self.handle, True, listitem=listitem)
 
 
 # DEBUG ONLY
