@@ -8,6 +8,7 @@ from libka.menu import Menu
 import xbmcgui
 import xbmcplugin
 
+
 class KSSite(Site):
     """K-Sportowy API."""
 
@@ -15,7 +16,7 @@ class KSSite(Site):
         super().__init__(base, *args, verify_ssl=verify_ssl, **kwargs)
 
         self.storage = Storage('data.json', addon=None, sync=True)
-            
+
         self.headers = {
             'api-deviceinfo': 'Phone android;30;android;sdk_gphone_x86;google;1.0.0.24;',
             'accept-encoding': 'gzip',
@@ -35,7 +36,7 @@ class KSSite(Site):
                 return res.json()
             else:
                 return ()
-            
+
     def _post_ks(self, endpoint, params={}, payload=None):
         params.update({
             'lang': 'pl',
@@ -54,17 +55,17 @@ class KSSite(Site):
             return self._get_ks(endpoint, params, headers)
         if method == 'post':
             return self._post_ks(endpoint, params, payload)
-        
+
     def init(self):
         if self.storage.get('username') and self.storage.get('password'):
             self.check_login()
         else:
             email = xbmcgui.Dialog().input('Podaj swój email', type=xbmcgui.INPUT_ALPHANUM)
-            password = xbmcgui.Dialog().input('Podaj swoje hasło', type=xbmcgui.INPUT_ALPHANUM, 
+            password = xbmcgui.Dialog().input('Podaj swoje hasło', type=xbmcgui.INPUT_ALPHANUM,
                                               option=xbmcgui.ALPHANUM_HIDE_INPUT)
-            self.storage.set('username', email)   
+            self.storage.set('username', email)
             self.storage.set('password', password)
-            
+
     def check_login(self):
         self.headers.update({
             'api-authentication': str(self.storage.get('token')),
@@ -75,34 +76,55 @@ class KSSite(Site):
             return True
         else:
             self.login(self.storage.get('username'), self.storage.get('password'))
-            
+
     def login(self, username, password):
         payload = {
             "auth": {
-            "type": "PASSWORD",
-            "value": password
-        },
-        "email": username,
-        "rememberMe": True
+                "type": "PASSWORD",
+                "value": password
+            },
+            "email": username,
+            "rememberMe": True
         }
         userdata = self.make_request('post', '/api/subscribers/login', payload=payload)
-        
+
         if userdata and userdata.get('token'):
             self.storage.set('token', userdata['token'])
             self.storage.set('profile_id', userdata['activeProfileId'])
             self.storage.save()
         else:
             xbmcgui.Dialog().notification('K-Sportowy', 'Niezalogowano. Dostęp może być ograniczony.')
-            
+
     def catalog(self):
         return self.make_request('get', '/api/products/sections/main')
-    
+
     def section(self, id):
         return self.make_request('get', f'/api/products/sections/{id}')
-    
+
+    def serial_section(self, id):
+        return self.make_request('get', f'/api/products/vods/serials/{id}/seasons')
+
+    def serial_episode(self, id, e_id):
+        return self.make_request('get', f'/api/products/vods/serials/{id}/seasons/{e_id}/episodes')
+
     def playlist(self, id, type):
         param = {'videoType': type}
         return self.make_request('get', f'/api/products/{id}/videos/playlist', params=param)
+
+
+def gen_art(data):
+    fanart = data.get('16x9')[0]['url']
+    if data.get('1x1'):
+        return {
+            'fanart': fanart,
+            'poster': data.get('1x1')[0]['url']
+        }
+    else:
+        return {'fanart': fanart}
+
+
+def gen_info(data):
+    return {'title': data.get('title'), 'plot': data.get('lead')}
 
 
 class Main(Plugin):
@@ -125,34 +147,65 @@ class Main(Plugin):
 
     def noop(self):
         pass
-    
+
     def catalog(self):
         data = self.kssite.catalog()
-        
+
         with self.directory() as kdir:
             for item in data:
-                kdir.menu(item['title'], call(self.listing, item['id']))
-                
+                kdir.menu(item['title'], call(self.categories, item['id']))
+
+    def categories(self, id):
+        data = self.kssite.section(id)
+
+        with self.directory() as kdir:
+            for item in data.get('elements'):
+                if item['item']['type'] == 'BANNER':
+                    id = item['item']['webUrl'].split(',')[1]
+                    kdir.menu(item['item']['title'], call(self.listing, id))
+                if item['item']['type'] == 'EPISODE':
+                    kdir.play(item['item']['title'], call(self.play_item, item['item']['id']))
+                if item['item']['type'] == 'SERIAL':
+                    kdir.menu(item['item']['title'], call(self.serial, item['item']['id']))
+
+    def serial(self, id):
+        data = self.kssite.serial_section(id)
+
+        with self.directory() as kdir:
+            for item in data:
+                kdir.menu(item['title'], call(self.serial_episode, id, item['id']))
+
+    def serial_episode(self, id, e_id):
+        data = self.kssite.serial_episode(id, e_id)
+
+        with self.directory() as kdir:
+            for item in data:
+                kdir.play(item['title'], call(self.play_item, item['id']))
+
     def listing(self, id):
-        data = self.kssite.section(id)['elements']
-        
+        data = self.kssite.section(id)
+
         with self.directory() as kdir:
-            for item in data:
+            for item in data.get('elements'):
                 kdir.play(item['item']['title'], call(self.play_item, item['item']['id']))
-                
+
     def play_item(self, id):
         data = self.kssite.playlist(id, 'MOVIE')
-    
-        lic = data['drm']['WIDEVINE']['src']
+
+        lic = data.get('drm')['WIDEVINE']['src']
         lic = lic + '|Content-Type=application/octet-stream|R{SSM}|'
-        
-        if data['sources']['DASH'][0]['src'].startswith('//'):
-            src = 'https:' + data['sources']['DASH'][0]['src'] + '/.mpd'
+
+        if data.get('sources')['DASH'][0]['src'].startswith('//'):
+            src = 'https:' + data.get('sources')['DASH'][0]['src']
+            if src.endswith('Manifest.ism?indexMode'):
+                src = src + '/.mpd'
         else:
-            src = data['sources']['DASH'][0]['src'] + '/.mpd'
+            src = data.get('sources')['DASH'][0]['src']
+            if src.endswith('Manifest.ism?indexMode'):
+                src = src + '/.mpd'
 
         self.player(source=src, drm='com.widevine.alpha', protocol='mpd', license=lic)
-        
+
     def player(self, source, drm, protocol, license):
         from inputstreamhelper import Helper  # pylint: disable=import-outside-toplevel
 
