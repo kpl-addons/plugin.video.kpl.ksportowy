@@ -12,26 +12,10 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
-msgctxt "#30100"
-msgid "Login"
-msgstr "Logowanie w serwisie"
-
 msgctxt "#30101"
 msgid "User credentials"
-msgstr "Dane użytkownika"
+msgstr "Dane logowania"
 
 msgctxt "#30102"
-msgid "E-mail"
-msgstr ""
-
-msgctxt "#30103"
-msgid "Type your e-mail"
-msgstr "Podaj swój e-mail"
-
-msgctxt "#30104"
-msgid "Password"
-msgstr "Hasło"
-
-msgctxt "#30105"
-msgid "Type your password"
-msgstr "Podaj swoje hasło"
+msgid "Change credentials"
+msgstr "Zmień dane użytkownika"

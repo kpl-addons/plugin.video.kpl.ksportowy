@@ -57,14 +57,16 @@ class KSSite(Site):
             return self._post_ks(endpoint, params, payload)
 
     def init(self):
-        if self.storage.get('username') and self.storage.get('password'):
+        if self.storage.get('credentials'):
             self.check_login()
         else:
             email = xbmcgui.Dialog().input('Podaj swój email', type=xbmcgui.INPUT_ALPHANUM)
             password = xbmcgui.Dialog().input('Podaj swoje hasło', type=xbmcgui.INPUT_ALPHANUM,
                                               option=xbmcgui.ALPHANUM_HIDE_INPUT)
-            self.storage.set('username', email)
-            self.storage.set('password', password)
+            self.storage.set('credentials', {
+                'email': email,
+                'pass': password
+            })
 
     def check_login(self):
         self.headers.update({
@@ -75,7 +77,7 @@ class KSSite(Site):
         if res:
             return True
         else:
-            self.login(self.storage.get('username'), self.storage.get('password'))
+            self.login(self.storage.get('credentials')['email'], self.storage.get('credentials')['pass'])
 
     def login(self, username, password):
         payload = {
@@ -89,9 +91,10 @@ class KSSite(Site):
         userdata = self.make_request('post', '/api/subscribers/login', payload=payload)
 
         if userdata and userdata.get('token'):
-            self.storage.set('token', userdata['token'])
-            self.storage.set('profile_id', userdata['activeProfileId'])
-            self.storage.save()
+            self.storage.set('user_data', {
+                'token': userdata.get('token'),
+                'profile_id': userdata.get('activeProfileId')
+            })
         else:
             xbmcgui.Dialog().notification('K-Sportowy', 'Niezalogowano. Dostęp może być ograniczony.')
 
@@ -110,21 +113,6 @@ class KSSite(Site):
     def playlist(self, id, type):
         param = {'videoType': type}
         return self.make_request('get', f'/api/products/{id}/videos/playlist', params=param)
-
-
-def gen_art(data):
-    fanart = data.get('16x9')[0]['url']
-    if data.get('1x1'):
-        return {
-            'fanart': fanart,
-            'poster': data.get('1x1')[0]['url']
-        }
-    else:
-        return {'fanart': fanart}
-
-
-def gen_info(data):
-    return {'title': data.get('title'), 'plot': data.get('lead')}
 
 
 class Main(Plugin):
@@ -220,6 +208,17 @@ class Main(Plugin):
             listitem.setProperty('inputstream.adaptive.license_key', license)
 
             xbmcplugin.setResolvedUrl(self.handle, True, listitem=listitem)
+
+    def change_credentials(self):
+        self.user_data.delete('credentials')
+        self.user_data.delete('user_data')
+        email = xbmcgui.Dialog().input('Podaj swój email', type=xbmcgui.INPUT_ALPHANUM)
+        password = xbmcgui.Dialog().input('Podaj swoje hasło', type=xbmcgui.INPUT_ALPHANUM,
+                                          option=xbmcgui.ALPHANUM_HIDE_INPUT)
+        self.user_data.set('credentials', {
+            'email': email,
+            'pass': password
+        })
 
 
 # DEBUG ONLY
