@@ -120,20 +120,37 @@ class KSSite(Site):
 
     def transmissions_items(self):
         epg = self.make_request('get', '/api/products/sections/rozklad-jazdy')
+
         if epg:
+            id_a = epg[0]['elements'][0]['item']['id']
+            id_b = epg[0]['elements'][1]['item']['id']
+
             now = calendar.now()
             since = datetime.datetime.strftime(now, '%Y-%m-%d') + 'T00:00+0200'
             till = datetime.datetime.strftime(now, '%Y-%m-%d') + 'T23:59+0200'
-            params = {
+            param_tod = {
+                'lang': 'pl',
+                'platform': 'ANDROID',
                 'since': since,
                 'till': till
             }
-            id_a = epg[0]['elements'][0]['item']['id']
-            id_b = epg[0]['elements'][1]['item']['id']
-            programmes = self.make_request('get', f'/api/products/lives/programmes?liveId[]={id_a}&liveId[]={id_b}',
-                                           params=params)
 
-            return programmes
+            tomorrow = now + datetime.timedelta(days=1)
+            since_tomorrow = datetime.datetime.strftime(tomorrow, '%Y-%m-%d') + 'T00:00+0200'
+            till_tomorrow = datetime.datetime.strftime(tomorrow, '%Y-%m-%d') + 'T23:59+0200'
+
+            param_tom = {
+                'lang': 'pl',
+                'platform': 'ANDROID',
+                'since': since_tomorrow,
+                'till': till_tomorrow
+            }
+
+            with self.concurrent() as con:
+                con.a.today.jget(f'/api/products/lives/programmes?liveId[]={id_a}&liveId[]={id_b}', params=param_tod)
+                con.a.tomorrow.jget(f'/api/products/lives/programmes?liveId[]={id_a}&liveId[]={id_b}', params=param_tom)
+
+            return con.a
 
 
 class Main(Plugin):
@@ -271,8 +288,9 @@ class Main(Plugin):
 
         live = []
         future = []
+        tomorrow = []
 
-        for item in data:
+        for item in data.today:
             now = datetime.datetime.now().timestamp()
             since = calendar.str2datetime(item['since'].replace('+02:00', '')).timestamp()
             till = calendar.str2datetime(item['till'].replace('+02:00', '')).timestamp()
@@ -281,22 +299,27 @@ class Main(Plugin):
             if now < since:
                 future.append(item)
 
+        for item in data.tomorrow:
+            tomorrow.append(item)
+
         return {
             'live': live,
-            'future': future
+            'future': future,
+            'tomorrow': tomorrow
         }
 
     def transmissions(self):
         data = self.transmissions_data()
         live = data['live']
         future = data['future']
+        tomorrow = data['tomorrow']
 
         with self.directory() as kdir:
             if len(live) > 0:
                 kdir.item(self.fmt('LIVE!', 'live'), call(self.noop))
                 for l in live:
                     start = calendar.str2datetime(l['since'].replace('+02:00', ''))
-                    start = datetime.datetime.strftime(start, '%H:%M')
+                    start = f'{start:%H:%M}'
                     title = f'{self.fmt(start)} - {self.fmt(l["title"], "current")}'
                     info = self.infolabel(l)
                     art = self.gen_art(l)
@@ -305,10 +328,19 @@ class Main(Plugin):
                 kdir.item(self.fmt('NASTĘPNIE!', 'separator'), call(self.noop))
                 for f in future:
                     start = calendar.str2datetime(f['since'].replace('+02:00', ''))
-                    start = datetime.datetime.strftime(start, '%H:%M')
+                    start = f'{start:%H:%M}'
                     title = f'{self.fmt(start)} - {self.fmt(f["title"], "future")}'
                     info = self.infolabel(f)
                     art = self.gen_art(f)
+                    kdir.item(title, call(self.noop), info=info, art=art)
+            if len(tomorrow) > 0:
+                kdir.item(self.fmt('JUTRO!', 'separator'), call(self.noop))
+                for t in tomorrow:
+                    start = calendar.str2datetime(t['since'].replace('+02:00', ''))
+                    start = f'{start:%H:%M}'
+                    title = f'{self.fmt(start)} - {self.fmt(t["title"], "future")}'
+                    info = self.infolabel(t)
+                    art = self.gen_art(t)
                     kdir.item(title, call(self.noop), info=info, art=art)
             if len(live) < 1 > len(future):
                 kdir.item(self.fmt('Pusto'), call(self.noop))
