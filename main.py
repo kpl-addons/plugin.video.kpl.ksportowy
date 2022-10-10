@@ -159,8 +159,7 @@ class Main(Plugin):
 
     def fmt(self, text, fmt=None):
         STYLE = {
-            'folder_def': 'B;COLOR white;'.split(';'),
-            'playable': 'I;COLOR orange;'.split(';'),
+            'folder_def': ['B'],
             'trans.time': {
                 None: 'B;COLOR gray;[]'.split(';'),
                 'live': 'B;COLOR green;[]'.split(';'),
@@ -172,8 +171,6 @@ class Main(Plugin):
 
         if fmt == 'folder':
             return stylize(text, STYLE['folder_def'])
-        if fmt == 'playable':
-            return stylize(text, STYLE['playable'])
         if fmt == 'separator':
             return stylize(text, STYLE['folder_list_separator'])
         if fmt == 'live':
@@ -184,6 +181,38 @@ class Main(Plugin):
             return stylize(text, STYLE['trans.time']['future'])
         if not fmt:
             return stylize(text, STYLE['trans.time'][None])
+
+    def infolabel(self, item):
+        if type(item) == dict:
+            if item.get('item'):
+                return {
+                    'title': item['item'].get('title'),
+                    'plot': item['item'].get('lead')
+                }
+            else:
+                return {
+                    'title': item.get('title'),
+                    'plot': item.get('lead')
+                }
+
+    def gen_art(self, item):
+        if type(item) == dict:
+            if item.get('item'):
+                if item.get('item', {}).get('images', {}).get('16x9', []) and item.get('item', {}).get('images', {}).get('1x1', []):
+                    return {
+                        'fanart': item.get('item', {}).get('images', {}).get('16x9', [])[0].get("url"),
+                        'poster': item.get('item', {}).get('images', {}).get('1x1', [])[0].get("url"),
+                    }
+                else:
+                    return {}
+            else:
+                if item.get('images', {}).get('16x9', []) and item.get('images', {}).get('1x1', []):
+                    return {
+                        'fanart': item.get('images', {}).get('16x9', [])[0].get("url"),
+                        'poster': item.get('images', {}).get('1x1', [])[0].get("url"),
+                    }
+                else:
+                    return {}
 
     def catalog(self):
         data = self.kssite.catalog()
@@ -200,13 +229,17 @@ class Main(Plugin):
 
         with self.directory() as kdir:
             for item in data.get('elements'):
+                info = self.infolabel(item)
+                art = self.gen_art(item)
                 if item['item']['type'] == 'BANNER':
                     id = item['item']['webUrl'].split(',')[1]
-                    kdir.menu(self.fmt(item['item']['title'], 'folder'), call(self.listing, id))
+                    kdir.menu(self.fmt(item['item']['title'], 'folder'), call(self.listing, id), info=info, art=art)
                 if item['item']['type'] == 'EPISODE':
-                    kdir.play(self.fmt(item['item']['title'], 'playable'), call(self.play_item, item['item']['id'], 'MOVIE'))
+                    kdir.play(item['item']['title'], call(self.play_item, item['item']['id'], 'MOVIE'), info=info,
+                              art=art)
                 if item['item']['type'] == 'SERIAL':
-                    kdir.menu(self.fmt(item['item']['title'], 'folder'), call(self.serial, item['item']['id']))
+                    kdir.menu(self.fmt(item['item']['title'], 'folder'), call(self.serial, item['item']['id']),
+                              info=info, art=art)
 
     def serial(self, id):
         data = self.kssite.serial_section(id)
@@ -220,14 +253,18 @@ class Main(Plugin):
 
         with self.directory() as kdir:
             for item in data:
-                kdir.play(self.fmt(item['title'], 'playable'), call(self.play_item, item['id'], 'MOVIE'))
+                info = self.infolabel(item)
+                art = self.gen_art(item)
+                kdir.play(item['title'], call(self.play_item, item['id'], 'MOVIE'), info=info, art=art)
 
     def listing(self, id):
         data = self.kssite.section(id)
 
         with self.directory() as kdir:
             for item in data.get('elements'):
-                kdir.play(self.fmt(item['item']['title'], 'playable'), call(self.play_item, item['item']['id'], 'MOVIE'))
+                info = self.infolabel(item)
+                art = self.gen_art(item)
+                kdir.play(item['item']['title'], call(self.play_item, item['item']['id'], 'MOVIE'), info=info, art=art)
 
     def transmissions_data(self):
         data = self.kssite.transmissions_items()
@@ -261,14 +298,18 @@ class Main(Plugin):
                     start = calendar.str2datetime(l['since'].replace('+02:00', ''))
                     start = datetime.datetime.strftime(start, '%H:%M')
                     title = f'{self.fmt(start)} - {self.fmt(l["title"], "current")}'
-                    kdir.play(title, call(self.play_item, l['live']['id'], 'LIVE'))
+                    info = self.infolabel(l)
+                    art = self.gen_art(l)
+                    kdir.play(title, call(self.play_item, l['live']['id'], 'LIVE'), info=info, art=art)
             if len(future) > 0:
                 kdir.item(self.fmt('NASTĘPNIE!', 'separator'), call(self.noop))
                 for f in future:
                     start = calendar.str2datetime(f['since'].replace('+02:00', ''))
                     start = datetime.datetime.strftime(start, '%H:%M')
                     title = f'{self.fmt(start)} - {self.fmt(f["title"], "future")}'
-                    kdir.item(title, call(self.noop))
+                    info = self.infolabel(f)
+                    art = self.gen_art(f)
+                    kdir.item(title, call(self.noop), info=info, art=art)
             if len(live) < 1 > len(future):
                 kdir.item(self.fmt('Pusto'), call(self.noop))
 
