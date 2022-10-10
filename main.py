@@ -1,12 +1,16 @@
 # libka
-from libka import Plugin, Site, call
+from libka import Plugin, Site, call, calendar
 from libka.storage import Storage
 from libka.logs import log
 from libka.menu import Menu
+from libka.format import stylize
 
 # xbmc
 import xbmcgui
 import xbmcplugin
+
+# common imports
+import datetime
 
 
 class KSSite(Site):
@@ -110,19 +114,36 @@ class KSSite(Site):
     def serial_episode(self, id, e_id):
         return self.make_request('get', f'/api/products/vods/serials/{id}/seasons/{e_id}/episodes')
 
-    def playlist(self, id, type):
-        param = {'videoType': type}
+    def playlist(self, id, v_type):
+        param = {'videoType': v_type}
         return self.make_request('get', f'/api/products/{id}/videos/playlist', params=param)
+
+    def transmissions_items(self):
+        epg = self.make_request('get', '/api/products/sections/rozklad-jazdy')
+        if epg:
+            now = calendar.now()
+            since = datetime.datetime.strftime(now, '%Y-%m-%d') + 'T00:00+0200'
+            till = datetime.datetime.strftime(now, '%Y-%m-%d') + 'T23:59+0200'
+            params = {
+                'since': since,
+                'till': till
+            }
+            id_a = epg[0]['elements'][0]['item']['id']
+            id_b = epg[0]['elements'][1]['item']['id']
+            programmes = self.make_request('get', f'/api/products/lives/programmes?liveId[]={id_a}&liveId[]={id_b}',
+                                           params=params)
+
+            return programmes
 
 
 class Main(Plugin):
     """K-Sportowy plugin."""
 
     MENU = Menu(view='addons', items=[
-        Menu(title='Biblioteka', call='catalog'),
-        Menu(title='Rozkład jazdy', call='noop'),
-        Menu(title='Moja lista', call='noop'),
-        Menu(title='Ustawienia', call='noop'),
+        Menu(title='[B]Biblioteka[/B]', call='catalog'),
+        Menu(title='[B]Rozkład jazdy[/B]', call='transmissions'),
+        Menu(title='[B]Moja lista[/B]', call='noop'),
+        Menu(title='[I]Ustawienia[/I]', call='noop'),
     ])
 
     def __init__(self):
@@ -136,12 +157,43 @@ class Main(Plugin):
     def noop(self):
         pass
 
+    def fmt(self, text, fmt=None):
+        STYLE = {
+            'folder_def': 'B;COLOR white;'.split(';'),
+            'playable': 'I;COLOR orange;'.split(';'),
+            'trans.time': {
+                None: 'B;COLOR gray;[]'.split(';'),
+                'live': 'B;COLOR green;[]'.split(';'),
+                'current': 'B;COLOR orange;'.split(';'),
+                'future': 'COLOR yellow;'.split(';'),
+            },
+            'folder_list_separator': ['COLOR khaki', 'B', 'I']
+        }
+
+        if fmt == 'folder':
+            return stylize(text, STYLE['folder_def'])
+        if fmt == 'playable':
+            return stylize(text, STYLE['playable'])
+        if fmt == 'separator':
+            return stylize(text, STYLE['folder_list_separator'])
+        if fmt == 'live':
+            return stylize(text, STYLE['trans.time']['live'])
+        if fmt == 'current':
+            return stylize(text, STYLE['trans.time']['current'])
+        if fmt == 'future':
+            return stylize(text, STYLE['trans.time']['future'])
+        if not fmt:
+            return stylize(text, STYLE['trans.time'][None])
+
     def catalog(self):
         data = self.kssite.catalog()
 
         with self.directory() as kdir:
             for item in data:
-                kdir.menu(item['title'], call(self.categories, item['id']))
+                if 'Nadchodzące transmisje' in item['title']:
+                    kdir.menu(self.fmt(item['title'], 'folder'), call(self.transmissions))
+                    continue
+                kdir.menu(self.fmt(item['title'], 'folder'), call(self.categories, item['id']))
 
     def categories(self, id):
         data = self.kssite.section(id)
@@ -150,35 +202,78 @@ class Main(Plugin):
             for item in data.get('elements'):
                 if item['item']['type'] == 'BANNER':
                     id = item['item']['webUrl'].split(',')[1]
-                    kdir.menu(item['item']['title'], call(self.listing, id))
+                    kdir.menu(self.fmt(item['item']['title'], 'folder'), call(self.listing, id))
                 if item['item']['type'] == 'EPISODE':
-                    kdir.play(item['item']['title'], call(self.play_item, item['item']['id']))
+                    kdir.play(self.fmt(item['item']['title'], 'playable'), call(self.play_item, item['item']['id'], 'MOVIE'))
                 if item['item']['type'] == 'SERIAL':
-                    kdir.menu(item['item']['title'], call(self.serial, item['item']['id']))
+                    kdir.menu(self.fmt(item['item']['title'], 'folder'), call(self.serial, item['item']['id']))
 
     def serial(self, id):
         data = self.kssite.serial_section(id)
 
         with self.directory() as kdir:
             for item in data:
-                kdir.menu(item['title'], call(self.serial_episode, id, item['id']))
+                kdir.menu(self.fmt(item['title'], 'folder'), call(self.serial_episode, id, item['id']))
 
     def serial_episode(self, id, e_id):
         data = self.kssite.serial_episode(id, e_id)
 
         with self.directory() as kdir:
             for item in data:
-                kdir.play(item['title'], call(self.play_item, item['id']))
+                kdir.play(self.fmt(item['title'], 'playable'), call(self.play_item, item['id'], 'MOVIE'))
 
     def listing(self, id):
         data = self.kssite.section(id)
 
         with self.directory() as kdir:
             for item in data.get('elements'):
-                kdir.play(item['item']['title'], call(self.play_item, item['item']['id']))
+                kdir.play(self.fmt(item['item']['title'], 'playable'), call(self.play_item, item['item']['id'], 'MOVIE'))
 
-    def play_item(self, id):
-        data = self.kssite.playlist(id, 'MOVIE')
+    def transmissions_data(self):
+        data = self.kssite.transmissions_items()
+
+        live = []
+        future = []
+
+        for item in data:
+            now = datetime.datetime.now().timestamp()
+            since = calendar.str2datetime(item['since'].replace('+02:00', '')).timestamp()
+            till = calendar.str2datetime(item['till'].replace('+02:00', '')).timestamp()
+            if since < now < till:
+                live.append(item)
+            if now < since:
+                future.append(item)
+
+        return {
+            'live': live,
+            'future': future
+        }
+
+    def transmissions(self):
+        data = self.transmissions_data()
+        live = data['live']
+        future = data['future']
+
+        with self.directory() as kdir:
+            if len(live) > 0:
+                kdir.item(self.fmt('LIVE!', 'live'), call(self.noop))
+                for l in live:
+                    start = calendar.str2datetime(l['since'].replace('+02:00', ''))
+                    start = datetime.datetime.strftime(start, '%H:%M')
+                    title = f'{self.fmt(start)} - {self.fmt(l["title"], "current")}'
+                    kdir.play(title, call(self.play_item, l['live']['id'], 'LIVE'))
+            if len(future) > 0:
+                kdir.item(self.fmt('NASTĘPNIE!', 'separator'), call(self.noop))
+                for f in future:
+                    start = calendar.str2datetime(f['since'].replace('+02:00', ''))
+                    start = datetime.datetime.strftime(start, '%H:%M')
+                    title = f'{self.fmt(start)} - {self.fmt(f["title"], "future")}'
+                    kdir.item(title, call(self.noop))
+            if len(live) < 1 > len(future):
+                kdir.item(self.fmt('Pusto'), call(self.noop))
+
+    def play_item(self, id, v_type):
+        data = self.kssite.playlist(id, v_type)
 
         lic = data.get('drm')['WIDEVINE']['src']
         lic = lic + '|Content-Type=application/octet-stream|R{SSM}|'
