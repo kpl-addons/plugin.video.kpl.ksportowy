@@ -215,7 +215,9 @@ class Main(Plugin):
     def gen_art(self, item):
         if type(item) == dict:
             if item.get('item'):
-                if item.get('item', {}).get('images', {}).get('16x9', []) and item.get('item', {}).get('images', {}).get('1x1', []):
+                if item.get('item', {}).get('images', {}).get('16x9', []) and item.get('item', {}).get('images',
+                                                                                                       {}).get('1x1',
+                                                                                                               []):
                     return {
                         'fanart': item.get('item', {}).get('images', {}).get('16x9', [])[0].get("url"),
                         'poster': item.get('item', {}).get('images', {}).get('1x1', [])[0].get("url"),
@@ -317,6 +319,7 @@ class Main(Plugin):
         with self.directory() as kdir:
             if len(live) > 0:
                 kdir.item(self.fmt('LIVE!', 'live'), call(self.noop))
+                live = sorted(live, key=lambda i: i['since'])
                 for l in live:
                     start = calendar.str2datetime(l['since'].replace('+02:00', ''))
                     start = f'{start:%H:%M}'
@@ -326,6 +329,7 @@ class Main(Plugin):
                     kdir.play(title, call(self.play_item, l['live']['id'], 'LIVE'), info=info, art=art)
             if len(future) > 0:
                 kdir.item(self.fmt('NASTĘPNIE!', 'separator'), call(self.noop))
+                future = sorted(future, key=lambda i: i['since'])
                 for f in future:
                     start = calendar.str2datetime(f['since'].replace('+02:00', ''))
                     start = f'{start:%H:%M}'
@@ -335,6 +339,7 @@ class Main(Plugin):
                     kdir.item(title, call(self.noop), info=info, art=art)
             if len(tomorrow) > 0:
                 kdir.item(self.fmt('JUTRO!', 'separator'), call(self.noop))
+                tomorrow = sorted(tomorrow, key=lambda i: i['since'])
                 for t in tomorrow:
                     start = calendar.str2datetime(t['since'].replace('+02:00', ''))
                     start = f'{start:%H:%M}'
