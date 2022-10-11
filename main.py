@@ -41,24 +41,35 @@ class KSSite(Site):
             else:
                 return ()
 
-    def _post_ks(self, endpoint, params={}, payload=None):
+    def _post_ks(self, endpoint, params={}, payload=None, headers=None):
         params.update({
             'lang': 'pl',
             'platform': 'ANDROID'
         })
         if endpoint:
-            res = self.post(endpoint, params=params, json=payload)
+            res = self.post(endpoint, params=params, json=payload, headers=headers)
             log(f'[K-Sportowy] Request made to {res.url} with params: {params}')
             if res.status_code == 200:
                 return res.json()
             else:
                 return ()
 
+    def _delete_ks(self, endpoint, params={}, headers=None):
+        params.update({
+            'lang': 'pl',
+            'platform': 'ANDROID'
+        })
+        if endpoint:
+            res = self.delete(endpoint, params=params, headers=headers)
+            log(f'[K-Sportowy] Request made to {res.url} with params: {params}')
+
     def make_request(self, method, endpoint, params={}, payload={}, headers=None):
         if method == 'get':
             return self._get_ks(endpoint, params, headers)
         if method == 'post':
-            return self._post_ks(endpoint, params, payload)
+            return self._post_ks(endpoint, params, payload, headers)
+        if method == 'delete':
+            return self._delete_ks(endpoint, params, headers)
 
     def init(self):
         if self.storage.get('credentials'):
@@ -152,6 +163,33 @@ class KSSite(Site):
 
             return con.a
 
+    def favourites(self):
+        self.headers.update({
+            'api-authentication': str(self.storage.get('user_data')['token']),
+            'api-profileuid': str(self.storage.get('user_data')['profile_id'])
+        })
+        param = {'type': 'FAVOURITE'}
+        return self.make_request('get', '/api/subscribers/bookmarks', params=param, headers=self.headers)
+
+    def add_fav(self, f_id):
+        self.headers.update({
+            'api-authentication': str(self.storage.get('user_data')['token']),
+            'api-profileuid': str(self.storage.get('user_data')['profile_id'])
+        })
+        param = {'type': 'FAVOURITE'}
+        json = {
+            "itemId": f_id
+        }
+        return self.make_request('post', '/api/subscribers/bookmarks', params=param, payload=json, headers=self.headers)
+
+    def remove_fav(self, f_id):
+        self.headers.update({
+            'api-authentication': str(self.storage.get('user_data')['token']),
+            'api-profileuid': str(self.storage.get('user_data')['profile_id'])
+        })
+        params = {'type': 'FAVOURITE', "itemId[]": f_id}
+        return self.make_request('delete', '/api/subscribers/bookmarks', params=params, headers=self.headers)
+
 
 class Main(Plugin):
     """K-Sportowy plugin."""
@@ -159,7 +197,7 @@ class Main(Plugin):
     MENU = Menu(view='addons', items=[
         Menu(title='[B]Biblioteka[/B]', call='catalog'),
         Menu(title='[B]Rozkład jazdy[/B]', call='transmissions'),
-        Menu(title='[B]Moja lista[/B]', call='noop'),
+        Menu(title='[B]Moja lista[/B]', call='favourites'),
         Menu(title='[I]Ustawienia[/I]', call='noop'),
     ])
 
@@ -255,7 +293,7 @@ class Main(Plugin):
                     kdir.menu(self.fmt(item['item']['title'], 'folder'), call(self.listing, id), info=info, art=art)
                 if item['item']['type'] == 'EPISODE':
                     kdir.play(item['item']['title'], call(self.play_item, item['item']['id'], 'MOVIE'), info=info,
-                              art=art)
+                              art=art, menu=[['Dodaj do mojej listy', call(self.add_fav, item['item']['id'])]])
                 if item['item']['type'] == 'SERIAL':
                     kdir.menu(self.fmt(item['item']['title'], 'folder'), call(self.serial, item['item']['id']),
                               info=info, art=art)
@@ -274,7 +312,8 @@ class Main(Plugin):
             for item in data:
                 info = self.infolabel(item)
                 art = self.gen_art(item)
-                kdir.play(item['title'], call(self.play_item, item['id'], 'MOVIE'), info=info, art=art)
+                kdir.play(item['title'], call(self.play_item, item['id'], 'MOVIE'), info=info, art=art,
+                          menu=[['Dodaj do mojej listy', call(self.add_fav, item['item']['id'])]])
 
     def listing(self, id):
         data = self.kssite.section(id)
@@ -283,7 +322,8 @@ class Main(Plugin):
             for item in data.get('elements'):
                 info = self.infolabel(item)
                 art = self.gen_art(item)
-                kdir.play(item['item']['title'], call(self.play_item, item['item']['id'], 'MOVIE'), info=info, art=art)
+                kdir.play(item['item']['title'], call(self.play_item, item['item']['id'], 'MOVIE'), info=info, art=art,
+                          menu=[['Dodaj do mojej listy', call(self.add_fav, item['item']['id'])]])
 
     def transmissions_data(self):
         data = self.kssite.transmissions_items()
@@ -351,6 +391,21 @@ class Main(Plugin):
                     kdir.item(title, call(self.noop), info=info, art=art)
             if len(live) < 1 > len(future):
                 kdir.item(self.fmt('Pusto'), call(self.noop))
+
+    def favourites(self):
+        favourites = self.kssite.favourites()['items']
+
+        with self.directory() as kdir:
+            for fav in favourites:
+                info = self.infolabel(fav)
+                kdir.play(fav['item']['title'], call(self.play_item, fav['item']['id'], 'MOVIE'), info=info,
+                          menu=[['Usuń z mojej listy', self.cmd.Container.Update(call(self.remove_fav, fav['item']['id']))]])
+
+    def add_fav(self, f_id):
+        self.kssite.add_fav(f_id)
+
+    def remove_fav(self, f_id):
+        self.kssite.remove_fav(f_id)
 
     def play_item(self, id, v_type):
         data = self.kssite.playlist(id, v_type)
