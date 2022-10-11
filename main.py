@@ -304,6 +304,8 @@ class Main(Plugin):
         for item in data.tomorrow:
             tomorrow.append(item)
 
+        tomorrow = [elem for elem in future if elem not in future]
+
         return {
             'live': live,
             'future': future,
@@ -328,7 +330,7 @@ class Main(Plugin):
                     art = self.gen_art(l)
                     kdir.play(title, call(self.play_item, l['live']['id'], 'LIVE'), info=info, art=art)
             if len(future) > 0:
-                kdir.item(self.fmt('NASTĘPNIE!', 'separator'), call(self.noop))
+                kdir.item(self.fmt('DZISIAJ!', 'separator'), call(self.noop))
                 future = sorted(future, key=lambda i: i['since'])
                 for f in future:
                     start = calendar.str2datetime(f['since'].replace('+02:00', ''))
