@@ -197,8 +197,8 @@ class Main(Plugin):
     MENU = Menu(view='addons', items=[
         Menu(title='[B]Biblioteka[/B]', call='catalog'),
         Menu(title='[B]Rozkład jazdy[/B]', call='transmissions'),
-        Menu(title='[B]Moja lista[/B]', call='favourites'),
-        Menu(title='[I]Ustawienia[/I]', call='noop'),
+        Menu(title='[B]Moja lista[/B]', call='favourites')
+        # Menu(title='[I]Ustawienia[/I]', call='noop'),
     ])
 
     def __init__(self):
