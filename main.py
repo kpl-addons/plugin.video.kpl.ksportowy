@@ -444,6 +444,7 @@ class Main(Plugin):
             listitem.setProperty('inputstream.adaptive.manifest_type', protocol)
             listitem.setProperty('inputstream.adaptive.license_type', drm)
             listitem.setProperty('inputstream.adaptive.license_key', license)
+            listitem.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
 
             xbmcplugin.setResolvedUrl(self.handle, True, listitem=listitem)
 
