@@ -259,25 +259,20 @@ class Main(Plugin):
                 }
 
     def gen_art(self, item):
-        if type(item) == dict:
-            if item.get('item'):
-                if item.get('item', {}).get('images', {}).get('16x9', []) and item.get('item', {}).get('images',
-                                                                                                       {}).get('1x1',
-                                                                                                               []):
-                    return {
-                        'fanart': item.get('item', {}).get('images', {}).get('16x9', [])[0].get("url"),
-                        'poster': item.get('item', {}).get('images', {}).get('1x1', [])[0].get("url"),
-                    }
-                else:
-                    return {}
-            else:
-                if item.get('images', {}).get('16x9', []) and item.get('images', {}).get('1x1', []):
-                    return {
-                        'fanart': item.get('images', {}).get('16x9', [])[0].get("url"),
-                        'poster': item.get('images', {}).get('1x1', [])[0].get("url"),
-                    }
-                else:
-                    return {}
+        def get_url(res):
+            try:
+                return images[res][0]['url']
+            except (KeyError, IndexError):
+                return None
+
+        if item.get('item'):
+            images = item['item']['images']
+        else:
+            images = item['images']
+        return {
+            'fanart': get_url('16x9'),
+            'poster': get_url('1x1'),
+        }
 
     def catalog(self):
         data = self.kssite.catalog()
