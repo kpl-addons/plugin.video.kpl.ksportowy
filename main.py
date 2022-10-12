@@ -250,12 +250,14 @@ class Main(Plugin):
             if item.get('item'):
                 return {
                     'title': item['item'].get('title'),
-                    'plot': item['item'].get('lead')
+                    'plot': item['item'].get('lead'),
+                    'duration': item['item'].get('duration')
                 }
             else:
                 return {
                     'title': item.get('title'),
-                    'plot': item.get('lead')
+                    'plot': item.get('lead'),
+                    'duration': item.get('duration')
                 }
 
     def gen_art(self, item):
