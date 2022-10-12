@@ -1,9 +1,10 @@
 # libka
-from libka import Plugin, Site, call, calendar
+from libka import Plugin, Site, call, calendar, subobject
 from libka.storage import Storage
 from libka.logs import log
 from libka.menu import Menu
 from libka.format import stylize
+from libka.search import Search, search
 
 # xbmc
 import xbmcgui
@@ -198,6 +199,18 @@ class KSSite(Site):
         else:
             return False
 
+    def search(self, query):
+        params = {
+            'lang': 'pl',
+            'platform': 'ANDROID',
+            'keyword': query
+        }
+        with self.concurrent() as con:
+            con.a.vod.jget('/api/products/vods/search/VOD', params=params)
+            con.a.serial.jget('/api/products/vods/search/SERIAL', params=params)
+            con.a.episode.jget('/api/products/vods/search/EPISODE', params=params)
+        return con.a
+
 
 class Main(Plugin):
     """K-Sportowy plugin."""
@@ -205,13 +218,17 @@ class Main(Plugin):
     MENU = Menu(view='addons', items=[
         Menu(title='[B]Biblioteka[/B]', call='catalog'),
         Menu(title='[B]Rozkład jazdy[/B]', call='transmissions'),
-        Menu(title='[B]Moja lista[/B]', call='favourites')
+        Menu(title='[B]Moja lista[/B]', call='favourites'),
+        Menu(title='[B]Szukaj[/B]', call='searching')
         # Menu(title='[I]Ustawienia[/I]', call='noop'),
     ])
+
+    searching = subobject()
 
     def __init__(self):
         super().__init__()
         self.kssite = KSSite()
+        self.searching = Search(addon=self, site=self.kssite, method=self.searching_folder)
 
     def home(self):
         self.menu()
@@ -318,7 +335,7 @@ class Main(Plugin):
                 info = self.infolabel(item)
                 art = self.gen_art(item)
                 kdir.play(item['title'], call(self.play_item, item['id'], 'MOVIE'), info=info, art=art,
-                          menu=[['Dodaj do mojej listy', call(self.add_fav, item['item']['id'])]])
+                          menu=[['Dodaj do mojej listy', call(self.add_fav, item['id'])]])
 
     def listing(self, id):
         data = self.kssite.section(id)
@@ -405,7 +422,8 @@ class Main(Plugin):
                 info = self.infolabel(fav)
                 art = self.gen_art(fav)
                 kdir.play(fav['item']['title'], call(self.play_item, fav['item']['id'], 'MOVIE'), info=info, art=art,
-                          menu=[['Usuń z mojej listy', self.cmd.Container.Update(call(self.remove_fav, fav['item']['id']))]])
+                          menu=[['Usuń z mojej listy',
+                                 self.cmd.Container.Update(call(self.remove_fav, fav['item']['id']))]])
 
     def add_fav(self, f_id):
         if self.kssite.add_fav(f_id):
@@ -414,6 +432,35 @@ class Main(Plugin):
     def remove_fav(self, f_id):
         if self.kssite.remove_fav(f_id):
             xbmcgui.Dialog().notification('K-Sportowy', 'Usunięto z mojej listy')
+
+    @search.folder
+    def searching_folder(self, query):
+        if query:
+            results = self.kssite.search(query)
+
+            vod = results.vod
+            serial = results.serial
+            episode = results.episode
+
+            with self.directory() as kdir:
+                if len(vod['items']) > 0:
+                    kdir.item(self.fmt('VOD!', 'separator'), call(self.noop))
+                    for v in vod['items']:
+                        info = self.infolabel(v)
+                        art = self.gen_art(v)
+                        kdir.play(v['title'], call(self.play_item, v['id'], 'MOVIE'), info=info, art=art)
+                if len(serial['items']) > 0:
+                    kdir.item(self.fmt('PROGRAMY!', 'separator'), call(self.noop))
+                    for s in serial['items']:
+                        info = self.infolabel(s)
+                        art = self.gen_art(s)
+                        kdir.menu(s['title'], call(self.serial, s['id']), info=info, art=art)
+                if len(episode['items']) > 0:
+                    kdir.item(self.fmt('ODCINKI!', 'separator'), call(self.noop))
+                    for e in episode['items']:
+                        info = self.infolabel(e)
+                        art = self.gen_art(e)
+                        kdir.play(e['title'], call(self.play_item, e['id'], 'MOVIE'), info=info, art=art)
 
     def play_item(self, id, v_type):
         data = self.kssite.playlist(id, v_type)
