@@ -28,7 +28,9 @@ class KSSite(Site):
             'cookie': 'AWSALBAPP-0=_remove_; AWSALBAPP-1=_remove_; AWSALBAPP-2=_remove_; AWSALBAPP-3=_remove_'
         }
 
-    def _get_ks(self, endpoint, params={}, headers=None):
+    def _get_ks(self, endpoint, params=None, headers=None):
+        if not params:
+            params = {}
         params.update({
             'lang': 'pl',
             'platform': 'ANDROID'
@@ -41,29 +43,27 @@ class KSSite(Site):
             else:
                 return ()
 
-    def _post_ks(self, endpoint, params={}, payload=None, headers=None):
+    def _post_ks(self, endpoint, params=None, payload=None, headers=None):
+        if not params:
+            params = {}
         params.update({
             'lang': 'pl',
             'platform': 'ANDROID'
         })
         if endpoint:
-            res = self.post(endpoint, params=params, json=payload, headers=headers)
-            log(f'[K-Sportowy] Request made to {res.url} with params: {params}')
-            if res.status_code == 200:
-                return res.json()
-            else:
-                return ()
+            return self.post(endpoint, params=params, json=payload, headers=headers)
 
-    def _delete_ks(self, endpoint, params={}, headers=None):
+    def _delete_ks(self, endpoint, params=None, headers=None):
+        if not params:
+            params = {}
         params.update({
             'lang': 'pl',
             'platform': 'ANDROID'
         })
         if endpoint:
-            res = self.delete(endpoint, params=params, headers=headers)
-            log(f'[K-Sportowy] Request made to {res.url} with params: {params}')
+            return self.delete(endpoint, params=params, headers=headers)
 
-    def make_request(self, method, endpoint, params={}, payload={}, headers=None):
+    def make_request(self, method, endpoint, params=None, payload=None, headers=None):
         if method == 'get':
             return self._get_ks(endpoint, params, headers)
         if method == 'post':
@@ -103,7 +103,7 @@ class KSSite(Site):
             "email": username,
             "rememberMe": True
         }
-        userdata = self.make_request('post', '/api/subscribers/login', payload=payload)
+        userdata = self.make_request('post', '/api/subscribers/login', payload=payload).json()
 
         if userdata and userdata.get('token'):
             self.storage.set('user_data', {
@@ -180,7 +180,11 @@ class KSSite(Site):
         json = {
             "itemId": f_id
         }
-        return self.make_request('post', '/api/subscribers/bookmarks', params=param, payload=json, headers=self.headers)
+        req = self.make_request('post', '/api/subscribers/bookmarks', params=param, payload=json, headers=self.headers)
+        if req.status_code == 204:
+            return True
+        else:
+            return False
 
     def remove_fav(self, f_id):
         self.headers.update({
@@ -188,7 +192,11 @@ class KSSite(Site):
             'api-profileuid': str(self.storage.get('user_data')['profile_id'])
         })
         params = {'type': 'FAVOURITE', "itemId[]": f_id}
-        return self.make_request('delete', '/api/subscribers/bookmarks', params=params, headers=self.headers)
+        req = self.make_request('delete', '/api/subscribers/bookmarks', params=params, headers=self.headers)
+        if req.status_code == 204:
+            return True
+        else:
+            return False
 
 
 class Main(Plugin):
@@ -393,7 +401,7 @@ class Main(Plugin):
                 kdir.item(self.fmt('Pusto'), call(self.noop))
 
     def favourites(self):
-        favourites = self.kssite.favourites()['items']
+        favourites = self.kssite.favourites().get('items')
 
         with self.directory() as kdir:
             for fav in favourites:
@@ -402,10 +410,12 @@ class Main(Plugin):
                           menu=[['Usuń z mojej listy', self.cmd.Container.Update(call(self.remove_fav, fav['item']['id']))]])
 
     def add_fav(self, f_id):
-        self.kssite.add_fav(f_id)
+        if self.kssite.add_fav(f_id):
+            xbmcgui.Dialog().notification('K-Sportowy', 'Dodano do mojej listy')
 
     def remove_fav(self, f_id):
-        self.kssite.remove_fav(f_id)
+        if self.kssite.remove_fav(f_id):
+            xbmcgui.Dialog().notification('K-Sportowy', 'Usunięto z mojej listy')
 
     def play_item(self, id, v_type):
         data = self.kssite.playlist(id, v_type)
