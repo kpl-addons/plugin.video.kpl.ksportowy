@@ -401,7 +401,8 @@ class Main(Plugin):
         with self.directory() as kdir:
             for fav in favourites:
                 info = self.infolabel(fav)
-                kdir.play(fav['item']['title'], call(self.play_item, fav['item']['id'], 'MOVIE'), info=info,
+                art = self.gen_art(fav)
+                kdir.play(fav['item']['title'], call(self.play_item, fav['item']['id'], 'MOVIE'), info=info, art=art,
                           menu=[['Usuń z mojej listy', self.cmd.Container.Update(call(self.remove_fav, fav['item']['id']))]])
 
     def add_fav(self, f_id):
