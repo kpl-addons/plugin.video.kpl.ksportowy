@@ -5,6 +5,7 @@ from libka.logs import log
 from libka.menu import Menu
 from libka.format import stylize
 from libka.search import Search, search
+from libka.resources import Resources
 
 # xbmc
 import xbmcgui
@@ -224,6 +225,7 @@ class Main(Plugin):
         super().__init__()
         self.kssite = KSSite()
         self.searching = Search(addon=self, site=self.kssite, method=self.searching_folder)
+        self.media_folder = Resources(addon=self).path + '/images/'
 
     def home(self):
         self.menu()
@@ -284,8 +286,8 @@ class Main(Plugin):
         else:
             images = item['images']
         return {
-            'fanart': get_url('16x9'),
-            'poster': get_url('1x1'),
+            'fanart': get_url('16x9') if get_url('16x9') else self.media_folder + 'fanart.png',
+            'poster': get_url('1x1') if get_url('1x1') else self.media_folder + 'poster.png'
         }
 
     def catalog(self):
@@ -293,10 +295,11 @@ class Main(Plugin):
 
         with self.directory() as kdir:
             for item in data:
+                art = self.gen_art(item)
                 if 'Nadchodzące transmisje' in item['title']:
-                    kdir.menu(self.fmt(item['title'], 'folder'), call(self.transmissions))
+                    kdir.menu(self.fmt(item['title'], 'folder'), call(self.transmissions), art=art)
                     continue
-                kdir.menu(self.fmt(item['title'], 'folder'), call(self.categories, item['id']))
+                kdir.menu(self.fmt(item['title'], 'folder'), call(self.categories, item['id']), art=art)
 
     def categories(self, id):
         data = self.kssite.section(id)
@@ -320,7 +323,8 @@ class Main(Plugin):
 
         with self.directory() as kdir:
             for item in data:
-                kdir.menu(self.fmt(item['title'], 'folder'), call(self.serial_episode, id, item['id']))
+                art = self.gen_art(item)
+                kdir.menu(self.fmt(item['title'], 'folder'), call(self.serial_episode, id, item['id']), art=art)
 
     def serial_episode(self, id, e_id):
         data = self.kssite.serial_episode(id, e_id)
