@@ -37,12 +37,7 @@ class KSSite(Site):
             'platform': 'ANDROID'
         })
         if endpoint:
-            res = self.get(endpoint, params=params, headers=headers)
-            log(f'[K-Sportowy] Request made to {res.url} with params: {params}')
-            if res.status_code == 200:
-                return res.json()
-            else:
-                return ()
+            return self.jget(endpoint, params=params, headers=headers)
 
     def _post_ks(self, endpoint, params=None, payload=None, headers=None):
         if not params:
@@ -90,10 +85,10 @@ class KSSite(Site):
             'api-profileuid': str(self.storage.get('profile_id'))
         })
         res = self.make_request('get', '/api/subscribers/detail', headers=self.headers)
-        if res:
-            return True
+        if res.get('code') == 'AUTHENTICATION_REQUIRED':
+            return self.login(self.storage.get('credentials')['email'], self.storage.get('credentials')['pass'])
         else:
-            self.login(self.storage.get('credentials')['email'], self.storage.get('credentials')['pass'])
+            return True
 
     def login(self, username, password):
         payload = {
