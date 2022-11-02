@@ -13,6 +13,15 @@ import xbmcplugin
 
 # common imports
 import datetime
+import pytz
+
+
+def timezone_offset(timezone):
+    naive = datetime.datetime.now()
+    tz = pytz.timezone(timezone)
+    aware = tz.localize(naive)
+    
+    return '+0' + str(aware.utcoffset())[:4]
 
 
 class KSSite(Site):
@@ -348,15 +357,16 @@ class Main(Plugin):
 
     def transmissions_data(self):
         data = self.kssite.transmissions_items()
-
+        
         live = []
         future = []
         tomorrow = []
 
         for item in data.today:
             now = datetime.datetime.now().timestamp()
-            since = calendar.str2datetime(item['since'].replace('+02:00', '')).timestamp()
-            till = calendar.str2datetime(item['till'].replace('+02:00', '')).timestamp()
+            offset = timezone_offset("Europe/Warsaw")
+            since = calendar.str2datetime(item['since'].replace(offset, '')).timestamp()
+            till = calendar.str2datetime(item['till'].replace(offset, '')).timestamp()
             if since < now < till:
                 live.append(item)
             if now < since:
@@ -378,13 +388,15 @@ class Main(Plugin):
         live = data['live']
         future = data['future']
         tomorrow = data['tomorrow']
+        
+        offset = timezone_offset("Europe/Warsaw")
 
         with self.directory() as kdir:
             if len(live) > 0:
                 kdir.item(self.fmt('LIVE!', 'live'), call(self.noop))
                 live = sorted(live, key=lambda i: i['since'])
                 for l in live:
-                    start = calendar.str2datetime(l['since'].replace('+02:00', ''))
+                    start = calendar.str2datetime(l['since'].replace(offset, ''))
                     start = f'{start:%H:%M}'
                     title = f'{self.fmt(start)} - {self.fmt(l["title"], "current")}'
                     info = self.infolabel(l)
@@ -394,7 +406,7 @@ class Main(Plugin):
                 kdir.item(self.fmt('DZISIAJ!', 'separator'), call(self.noop))
                 future = sorted(future, key=lambda i: i['since'])
                 for f in future:
-                    start = calendar.str2datetime(f['since'].replace('+02:00', ''))
+                    start = calendar.str2datetime(f['since'].replace(offset, ''))
                     start = f'{start:%H:%M}'
                     title = f'{self.fmt(start)} - {self.fmt(f["title"], "future")}'
                     info = self.infolabel(f)
@@ -404,7 +416,7 @@ class Main(Plugin):
                 kdir.item(self.fmt('JUTRO!', 'separator'), call(self.noop))
                 tomorrow = sorted(tomorrow, key=lambda i: i['since'])
                 for t in tomorrow:
-                    start = calendar.str2datetime(t['since'].replace('+02:00', ''))
+                    start = calendar.str2datetime(t['since'].replace(offset, ''))
                     start = f'{start:%H:%M}'
                     title = f'{self.fmt(start)} - {self.fmt(t["title"], "future")}'
                     info = self.infolabel(t)

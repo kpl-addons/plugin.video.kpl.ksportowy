@@ -3,6 +3,7 @@
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="script.module.libka"/>
+        <import addon="script.module.pytz"/>
         <import addon="script.module.inputstreamhelper"/>
     </requires>
     <extension point="xbmc.python.pluginsource" library="main.py">
